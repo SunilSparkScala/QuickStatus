@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme for Jetpack Compose -->
+    <style name="Theme.StatusApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your primary colors here. -->
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

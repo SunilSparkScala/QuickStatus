@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Clean Metallic Silver Lightning Bolt Logo -->
+    <path
+        android:pathData="M40.5,33 v24.75 h6.75 v20.25 l15.75,-27 h-9 l9,-18 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="40"
+                android:startY="33"
+                android:endX="63"
+                android:endY="78"
+                android:type="linear">
+                <item android:offset="0" android:color="#FFFFFFFF" /> <!-- Bright White -->
+                <item android:offset="1" android:color="#FFBDBDBD" /> <!-- Metallic Silver -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle outer glow/border to keep it sharp against pure black -->
+    <path
+        android:pathData="M54,54m-45,0a45,45 0,1 1,90 0a45,45 0,1 1,-90 0"
+        android:strokeWidth="0.5"
+        android:strokeColor="#33FFFFFF" />
+
+</vector>

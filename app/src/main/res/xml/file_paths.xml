@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Path to application cache directories for sharing files -->
+    <cache-path name="status_images" path="images/" />
+</paths>
