@@ -67,7 +67,16 @@ data class StatusTemplate(
     val secondaryTextColor: String = "#BDBDBD",
     val accentColor: String = "#E23744",
     val layoutStyle: String = "CARD_BOTTOM_FOOTER",
-    val bgTextureUrl: String? = null
+    val bgTextureUrl: String? = null,
+    val localDrawableRes: Int? = null,
+    val occasion: String = "EVERYDAY",
+    val tags: List<String> = emptyList(),
+    val overlayColor: String? = "#80000000",
+    val headlinePlaceholder: String = "LUXURY GLAMOUR & SPA",
+    val offerPlaceholder: String = "FLAT 30% OFF",
+    val subtextPlaceholder: String = "Hair Styling • Facial • Bridal Makeup",
+    val badgeText: String? = "LIMITED TIME OFFER",
+    val allowImageReplacement: Boolean = true
 )
 
 object QuickStatusAI {
@@ -145,6 +154,31 @@ object TemplateGenerator {
 
     fun generateMockCloudTemplates(category: String): List<StatusTemplate> {
         val templates = mutableListOf<StatusTemplate>()
+
+        // Reference Quality Salon Template (Bundled Offline Asset)
+        if (category == BusinessSector.SALON.label || category.contains("Salon", ignoreCase = true) || category.contains("Beauty", ignoreCase = true)) {
+            templates.add(
+                StatusTemplate(
+                    id = "salon_ref_01",
+                    category = category,
+                    themeName = "Artisan Velvet Salon",
+                    primaryTextColor = "#FFFFFF",
+                    secondaryTextColor = "#FFD700",
+                    accentColor = "#FF3F6C",
+                    layoutStyle = "PREMIUM_SALON_POSTER",
+                    localDrawableRes = R.drawable.bg_salon_artisan,
+                    occasion = "SPECIAL PROMO",
+                    tags = listOf("PREMIUM", "SALON", "OFFER"),
+                    overlayColor = "#B3000000",
+                    headlinePlaceholder = "LUXURY GLAMOUR & SPA",
+                    offerPlaceholder = "FLAT 30% OFF ON ALL SERVICES",
+                    subtextPlaceholder = "Hair Styling • Facial • Bridal Makeup • Nails",
+                    badgeText = "EXCLUSIVE PROMO",
+                    allowImageReplacement = true
+                )
+            )
+        }
+
         val styles = listOf("CARD_BOTTOM_FOOTER", "SIDE_BY_SIDE_GRID", "MINIMALIST_CENTER")
         val palettes = listOf(
             Triple("#FFFFFF", "#E0E0E0", "#E23744"), // Light
@@ -154,7 +188,7 @@ object TemplateGenerator {
         )
 
         val folder = category.lowercase().replace(" ", "_")
-        for (i in 0 until 6) {
+        for (i in 0 until 5) {
             val palette = palettes[i % palettes.size]
             templates.add(
                 StatusTemplate(
@@ -400,7 +434,12 @@ fun MainAppDashboard() {
                 if (selectedSector == null) {
                     CategorySelectionGrid { selectedSector = it }
                 } else {
-                    TemplateMarketplace(selectedSector!!, currentProfile, onTemplateClick = { activeTemplate = it })
+                    TemplateMarketplace(selectedSector!!, currentProfile, onTemplateClick = { selectedTemplate ->
+                        activeTemplate = selectedTemplate
+                        if (selectedTemplate.headlinePlaceholder.isNotBlank()) greetingText = selectedTemplate.headlinePlaceholder
+                        if (selectedTemplate.offerPlaceholder.isNotBlank()) mainOfferText = selectedTemplate.offerPlaceholder
+                        if (selectedTemplate.subtextPlaceholder.isNotBlank()) promoSubtext = selectedTemplate.subtextPlaceholder
+                    })
                 }
             }
 
@@ -545,19 +584,28 @@ fun TemplateGridItem(template: StatusTemplate, profile: ShopProfile, onTemplateC
     LaunchedEffect(template.bgTextureUrl) {
         template.bgTextureUrl?.let { url ->
             isImageLoading = true
-            val loader = coil.ImageLoader(context)
-            val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
-            val result = loader.execute(request)
-            if (result is coil.request.SuccessResult) {
-                cloudBitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            try {
+                val loader = coil.ImageLoader(context)
+                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
+                val result = loader.execute(request)
+                if (result is coil.request.SuccessResult) {
+                    cloudBitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                }
+            } catch (e: Exception) {
+                cloudBitmap = null
+            } finally {
+                isImageLoading = false
             }
-            isImageLoading = false
         }
     }
 
     val previewBitmap = remember(cloudBitmap, template) { 
         StatusCardCanvasEngine.generateStatusCardBitmap(
-            context, template, profile, "Sample", "Offer Details", "Details Here", cloudBitmap
+            context, template, profile,
+            if (template.headlinePlaceholder.isNotBlank()) template.headlinePlaceholder else "Sample",
+            if (template.offerPlaceholder.isNotBlank()) template.offerPlaceholder else "Offer Details",
+            if (template.subtextPlaceholder.isNotBlank()) template.subtextPlaceholder else "Details Here",
+            cloudBitmap
         ) 
     }
 
@@ -672,13 +720,34 @@ fun DesignSandbox(template: StatusTemplate, profile: ShopProfile, greeting: Stri
 private fun saveAndShareBitmap(context: Context, bitmap: Bitmap, targetWhatsApp: Boolean) {
     try {
         val imagesFolder = File(context.cacheDir, "images"); if (!imagesFolder.exists()) imagesFolder.mkdirs()
-        val file = File(imagesFolder, "status_card.png"); val stream = FileOutputStream(file)
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); stream.flush(); stream.close()
+        val file = File(imagesFolder, "status_card.png")
+        val stream = FileOutputStream(file)
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        stream.flush()
+        stream.close()
         val uri: Uri = FileProvider.getUriForFile(context, "com.vyapaar.quickstatus.fileprovider", file)
-        val shareIntent = Intent(Intent.ACTION_SEND).apply { type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        if (targetWhatsApp) shareIntent.setPackage("com.whatsapp")
-        context.startActivity(Intent.createChooser(shareIntent, "Share QuickStatus Card"))
-    } catch (e: Exception) { e.printStackTrace() }
+        val shareIntent = Intent(Intent.ACTION_SEND).apply { 
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) 
+        }
+        if (targetWhatsApp) {
+            shareIntent.setPackage("com.whatsapp")
+        }
+        try {
+            context.startActivity(Intent.createChooser(shareIntent, "Share QuickStatus Card"))
+        } catch (e: Exception) {
+            if (targetWhatsApp) {
+                shareIntent.setPackage(null)
+                context.startActivity(Intent.createChooser(shareIntent, "Share QuickStatus Card"))
+            } else {
+                throw e
+            }
+        }
+    } catch (e: Exception) { 
+        e.printStackTrace()
+        Toast.makeText(context, "Failed to share image: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
 }
 
 // ========================================================
@@ -699,16 +768,56 @@ object StatusCardCanvasEngine {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val cx = 540f
 
-        // Draw Base (Texture or Solid)
+        // Base solid dark background
         canvas.drawColor(Color.BLACK)
-        bgTexture?.let {
-            val src = Rect(0, 0, it.width, it.height)
-            val dst = Rect(0, 0, width, height)
-            paint.alpha = 130 
-            canvas.drawBitmap(it, src, dst, paint)
+
+        // Decode local resource if provided and bgTexture is null
+        var loadedBg: Bitmap? = bgTexture
+        if (loadedBg == null && template.localDrawableRes != null) {
+            try {
+                loadedBg = BitmapFactory.decodeResource(context.resources, template.localDrawableRes)
+            } catch (e: Exception) {
+                loadedBg = null
+            }
+        }
+
+        loadedBg?.let {
+            val imgW = it.width
+            val imgH = it.height
+            val scale = maxOf(width.toFloat() / imgW, height.toFloat() / imgH)
+            val scaledW = imgW * scale
+            val scaledH = imgH * scale
+            val leftOffset = (scaledW - width) / 2f
+            val topOffset = (scaledH - height) * 0.35f // Focal subject bias towards top
+
+            val srcLeft = (leftOffset / scale).toInt().coerceAtLeast(0)
+            val srcTop = (topOffset / scale).toInt().coerceAtLeast(0)
+            val srcRight = ((leftOffset + width) / scale).toInt().coerceAtMost(imgW)
+            val srcBottom = ((topOffset + height) / scale).toInt().coerceAtMost(imgH)
+
+            val srcRect = Rect(srcLeft, srcTop, srcRight, srcBottom)
+            val dstRect = Rect(0, 0, width, height)
+
             paint.alpha = 255
+            canvas.drawBitmap(it, srcRect, dstRect, paint)
+
+            // Localized Multi-stop Gradient Scrim (High contrast without over-darkening image focal center)
+            val overlayPaint = Paint()
+            val gradient = LinearGradient(
+                0f, 0f, 0f, height.toFloat(),
+                intArrayOf(
+                    Color.argb(220, 10, 10, 10), // Top: Contrast for badge & headline
+                    Color.argb(120, 10, 10, 10), // Upper-mid: Soft tint
+                    Color.argb(30, 10, 10, 10),  // Focal center: Radiant photograph visibility
+                    Color.argb(200, 10, 10, 10), // Lower-mid: Contrast for offer
+                    Color.argb(250, 10, 10, 10)  // Bottom: Solid dark dock for business details
+                ),
+                floatArrayOf(0.0f, 0.22f, 0.45f, 0.75f, 1.0f),
+                Shader.TileMode.CLAMP
+            )
+            overlayPaint.shader = gradient
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
         }
 
         // Parse Dynamic Colors from Template Metadata
@@ -721,6 +830,7 @@ object StatusCardCanvasEngine {
         paint.letterSpacing = 0.05f 
 
         when (template.layoutStyle) {
+            "PREMIUM_SALON_POSTER" -> drawPremiumSalonLayout(canvas, paint, greeting, offer, subtext, profile, primaryCol, secondaryCol, accentCol, width, height, template)
             "CARD_BOTTOM_FOOTER" -> drawBottomFooterLayout(canvas, paint, greeting, offer, subtext, profile, primaryCol, secondaryCol, accentCol, width, height)
             "SIDE_BY_SIDE_GRID" -> drawSideBySideLayout(canvas, paint, greeting, offer, subtext, profile, primaryCol, secondaryCol, accentCol, width, height)
             "MINIMALIST_CENTER" -> drawMinimalistCenterLayout(canvas, paint, greeting, offer, subtext, profile, primaryCol, secondaryCol, accentCol, width, height)
@@ -728,6 +838,210 @@ object StatusCardCanvasEngine {
         }
 
         return bitmap
+    }
+
+    private fun drawPremiumSalonLayout(
+        canvas: Canvas, 
+        paint: Paint, 
+        greeting: String, 
+        offer: String, 
+        subtext: String, 
+        profile: ShopProfile, 
+        pCol: Int, 
+        sCol: Int, 
+        aCol: Int, 
+        w: Int, 
+        h: Int,
+        template: StatusTemplate
+    ) {
+        val cx = w / 2f
+        val champagneGold = Color.parseColor("#F5D061")
+
+        // 1. TOP BRAND EMBLEM & BADGE
+        paint.color = champagneGold
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(cx, 115f, 9f, paint)
+        canvas.drawCircle(cx - 28f, 115f, 5f, paint)
+        canvas.drawCircle(cx + 28f, 115f, 5f, paint)
+
+        val badge = (template.badgeText ?: "LIMITED TIME OFFER").uppercase()
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = 28f
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        paint.letterSpacing = 0.25f
+
+        val badgeWidth = paint.measureText(badge) + 120f
+        val badgeTop = 145f
+        val badgeBottom = 210f
+        val badgeRect = RectF(cx - badgeWidth / 2f, badgeTop, cx + badgeWidth / 2f, badgeBottom)
+        
+        // Badge Background & Champagne Gold Stroke Border
+        paint.color = aCol
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(badgeRect, 32f, 32f, paint)
+
+        paint.color = champagneGold
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawRoundRect(badgeRect, 32f, 32f, paint)
+        paint.style = Paint.Style.FILL
+
+        paint.color = Color.WHITE
+        canvas.drawText(badge, cx, 187f, paint)
+
+        // 2. HEADLINE / CAMPAIGN TITLE
+        paint.letterSpacing = 0.14f
+        paint.color = pCol
+        paint.typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        val headlineY = drawAutoScaledWrappedText(canvas, greeting.uppercase(), cx, 300f, paint, w - 160, 150f, 56f, 36f)
+
+        // 3. HERO PROMOTIONAL OFFER
+        paint.letterSpacing = 0.05f
+        paint.color = champagneGold
+        paint.typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        val offerY = drawAutoScaledWrappedText(canvas, offer.uppercase(), cx, headlineY + 20f, paint, w - 120, 260f, 88f, 48f)
+
+        // Fine Decorative Gold Line Divider
+        paint.color = champagneGold
+        paint.strokeWidth = 3f
+        paint.style = Paint.Style.STROKE
+        canvas.drawLine(cx - 160f, offerY + 25f, cx + 160f, offerY + 25f, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(cx, offerY + 25f, 6f, paint)
+
+        // 4. SERVICE HIGHLIGHTS / SUBTEXT
+        paint.color = Color.WHITE
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        paint.letterSpacing = 0.06f
+        val subY = drawAutoScaledWrappedText(canvas, subtext, cx, offerY + 85f, paint, w - 160, 180f, 40f, 28f)
+
+        // 5. PRIMARY CTA BUTTON ("BOOK APPOINTMENT")
+        val ctaText = "BOOK APPOINTMENT"
+        paint.textSize = 28f
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        paint.letterSpacing = 0.2f
+        val ctaWidth = paint.measureText(ctaText) + 100f
+        val ctaTop = subY + 25f
+        val ctaBottom = ctaTop + 68f
+        val ctaRect = RectF(cx - ctaWidth / 2f, ctaTop, cx + ctaWidth / 2f, ctaBottom)
+
+        paint.color = champagneGold
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(ctaRect, 34f, 34f, paint)
+
+        paint.color = Color.BLACK
+        canvas.drawText(ctaText, cx, ctaTop + 44f, paint)
+
+        // 6. DOCKED BUSINESS PROFILE FOOTER
+        val bName = if (profile.businessName.isNotBlank()) profile.businessName.uppercase() else "YOUR BUSINESS NAME"
+        val categoryPhone = buildString {
+            if (profile.category.isNotBlank()) append(profile.category.uppercase())
+            if (profile.phone.isNotBlank()) {
+                if (isNotEmpty()) append("  •  ")
+                append("CALL / WA: ${profile.phone}")
+            }
+        }
+        val hasAddress = profile.address.isNotBlank()
+        val hasUpi = profile.upiId.isNotBlank()
+
+        var footerHeight = 220f
+        if (categoryPhone.isNotBlank()) footerHeight += 55f
+        if (hasAddress) footerHeight += 45f
+        if (hasUpi) footerHeight += 45f
+
+        val footerTop = h - footerHeight
+
+        // Translucent dark dock background
+        paint.color = Color.argb(240, 10, 10, 10)
+        canvas.drawRect(0f, footerTop, w.toFloat(), h.toFloat(), paint)
+
+        // Champagne Gold top accent line
+        paint.color = champagneGold
+        paint.strokeWidth = 5f
+        canvas.drawLine(0f, footerTop, w.toFloat(), footerTop, paint)
+
+        // Business Name
+        var currentY = footerTop + 75f
+        paint.color = Color.WHITE
+        paint.textSize = 52f
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        paint.letterSpacing = 0.08f
+        canvas.drawText(bName, cx, currentY, paint)
+
+        // Category & Phone
+        if (categoryPhone.isNotBlank()) {
+            currentY += 55f
+            paint.textSize = 34f
+            paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            paint.color = Color.LTGRAY
+            canvas.drawText(categoryPhone, cx, currentY, paint)
+        }
+
+        // Address
+        if (hasAddress) {
+            currentY += 45f
+            paint.textSize = 32f
+            paint.color = Color.LTGRAY
+            canvas.drawText("📍 ${profile.address}", cx, currentY, paint)
+        }
+
+        // UPI Handle
+        if (hasUpi) {
+            currentY += 45f
+            paint.textSize = 30f
+            paint.color = champagneGold
+            canvas.drawText("💳 UPI: ${profile.upiId}", cx, currentY, paint)
+        }
+    }
+
+    private fun drawAutoScaledWrappedText(
+        canvas: Canvas,
+        text: String,
+        x: Float,
+        y: Float,
+        paint: Paint,
+        maxWidth: Int,
+        maxHeight: Float,
+        initialTextSize: Float,
+        minTextSize: Float = 32f,
+        lineSpacingFactor: Float = 0.25f
+    ): Float {
+        var currentTextSize = initialTextSize
+        paint.textSize = currentTextSize
+
+        val words = text.split(" ")
+        var lines = mutableListOf<String>()
+
+        while (currentTextSize >= minTextSize) {
+            paint.textSize = currentTextSize
+            lines.clear()
+            var currentLine = ""
+            for (word in words) {
+                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                if (paint.measureText(testLine) <= maxWidth) {
+                    currentLine = testLine
+                } else {
+                    if (currentLine.isNotEmpty()) lines.add(currentLine)
+                    currentLine = word
+                }
+            }
+            if (currentLine.isNotEmpty()) lines.add(currentLine)
+
+            val totalH = lines.size * (paint.textSize * (1f + lineSpacingFactor))
+            if (totalH <= maxHeight || currentTextSize <= minTextSize) {
+                break
+            }
+            currentTextSize -= 4f
+        }
+
+        paint.textSize = currentTextSize
+        var currentY = y
+        val spacing = paint.textSize * lineSpacingFactor
+        for (line in lines) {
+            canvas.drawText(line, x, currentY, paint)
+            currentY += paint.textSize + spacing
+        }
+        return currentY
     }
 
     private fun drawBottomFooterLayout(canvas: Canvas, paint: Paint, greeting: String, offer: String, subtext: String, profile: ShopProfile, pCol: Int, sCol: Int, aCol: Int, w: Int, h: Int) {
